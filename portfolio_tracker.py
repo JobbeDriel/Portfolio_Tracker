@@ -1,7 +1,5 @@
 # --- portfolio_teracker.py --- 
 
-# --- smart_portfolio_tracker.py ---
-
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
@@ -52,8 +50,117 @@ class Portfolio:
             print("Portfolio is empty.")
         else:
             print("\nCurrent Portfolio:")
-            for idx, asset in enumerate(self.assets, 1):
-                print(f"{idx}. {asset['Ticker']} - {asset['Quantity']} shares at ${asset['Purchase Price']} ({asset['Sector']}, {asset['Asset Class']})")
+            for idx, asset in enumerate(sorted(self.assets, key=lambda x: x['Ticker']), 1):
+                ticker = asset['Ticker']
+                quantity = asset['Quantity']
+                purchase_price = asset['Purchase Price']
+                sector = asset['Sector']
+                asset_class = asset['Asset Class']
+
+                transaction_value = quantity * purchase_price
+
+                # Fetch current market price live
+                try:
+                    stock = yf.Ticker(ticker)
+                    current_price = stock.info.get('currentPrice', None)
+
+                    if current_price is not None:
+                        current_value = quantity * current_price
+                    else:
+                        current_value = None
+                except Exception as e:
+                    print(f"Error fetching current price for {ticker}: {e}")
+                    current_value = None
+
+                # Print nicely
+                print(f"{idx}. {ticker} - {quantity} shares @ ${purchase_price:.2f} ({sector}, {asset_class})")
+                print(f"    Transaction Value: ${transaction_value:.2f}")
+
+                if current_value is not None:
+                    print(f"    Current Market Value: ${current_value:.2f}")
+                else:
+                    print("    Current Market Value: Not available")
+
+                print("-" * 50)
+    
+    def view_summary(self):
+        if not self.assets:
+            print("Portfolio is empty.")
+            return
+
+        df = pd.DataFrame(self.assets)
+    
+        # Fetch current prices and compute current values
+        current_values = []
+        for _, row in df.iterrows():
+            try:
+                stock = yf.Ticker(row['Ticker'])
+                current_price = stock.info.get('currentPrice', None)
+                if current_price is None:
+                    raise ValueError("Price not available")
+                value = current_price * row['Quantity']
+            except Exception as e:
+                print(f"Error fetching price for {row['Ticker']}: {e}")
+                value = 0
+            current_values.append(value)
+
+        df['Current Value'] = current_values
+
+        total_value = df['Current Value'].sum()
+        if total_value == 0:
+            print("Could not calculate total portfolio value.")
+            return
+
+        # Weights per asset
+        df['Weight (%)'] = df['Current Value'] / total_value * 100
+
+        # Group by Asset Class and Sector
+        by_class = df.groupby('Asset Class')['Current Value'].sum()
+        by_class_weights = by_class / total_value * 100
+
+        by_sector = df.groupby('Sector')['Current Value'].sum()
+        by_sector_weights = by_sector / total_value * 100
+
+        # Output
+        print("\n--- Portfolio Summary ---")
+        print(f"Total Portfolio Value: ${total_value:,.2f}\n")
+
+        print("--- Asset Weights ---")
+        for _, row in df.iterrows():
+            print(f"{row['Ticker']}: ${row['Current Value']:,.2f} ({row['Weight (%)']:.2f}%)")
+
+        print("\n--- By Asset Class ---")
+        for cls, val in by_class.items():
+            print(f"{cls}: ${val:,.2f} ({by_class_weights[cls]:.2f}%)")
+
+        print("\n--- By Sector ---")
+        for sec, val in by_sector.items():
+            print(f"{sec}: ${val:,.2f} ({by_sector_weights[sec]:.2f}%)")
+
+        # Pie Chart: Asset Weights
+        plt.figure(figsize=(6, 6))
+        plt.pie(df['Current Value'], labels=df['Ticker'], autopct='%1.1f%%', startangle=140)
+        plt.title('Portfolio by Asset')
+        plt.axis('equal')
+        plt.tight_layout()
+        plt.show()
+
+        # Pie Chart: Asset Class Weights
+        plt.figure(figsize=(6, 6))
+        plt.pie(by_class, labels=by_class.index, autopct='%1.1f%%', startangle=140)
+        plt.title('Portfolio by Asset Class')
+        plt.axis('equal')
+        plt.tight_layout()
+        plt.show()
+
+        # Pie Chart: Sector Weights
+        plt.figure(figsize=(6, 6))
+        plt.pie(by_sector, labels=by_sector.index, autopct='%1.1f%%', startangle=140)
+        plt.title('Portfolio by Sector')
+        plt.axis('equal')
+        plt.tight_layout()
+        plt.show()
+
 
 def fetch_asset_info(ticker):
     try:
@@ -69,6 +176,8 @@ def fetch_asset_info(ticker):
     except Exception as e:
         print(f"Error fetching data for {ticker}: {e}")
         return None, None, None
+    
+
 
 def main():
     portfolio = Portfolio()
@@ -78,9 +187,10 @@ def main():
         print("1. View Asset Info")
         print("2. Add Asset")
         print("3. View Portfolio")
-        print("4. Exit")
+        print("4. Portfolio Summary & Weights")
+        print("5. Exit")
 
-        choice = input("Enter your choice (1-4): ").strip()
+        choice = input("Enter your choice (1-5): ").strip()
 
         if choice == '1':
             ticker = input("Enter ticker symbol (e.g., AAPL): ").strip().upper()
@@ -201,6 +311,9 @@ def main():
             portfolio.view_portfolio()
 
         elif choice == '4':
+            portfolio.view_summary()
+
+        elif choice == '5':
             print("Exiting Portfolio Tracker.")
             break
 
