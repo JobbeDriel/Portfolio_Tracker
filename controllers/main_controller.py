@@ -75,9 +75,9 @@ def main():
             print("1. Global Minimum Variance (GMV)")
             print("2. Equal Weighted Portfolio")
             print("3. ML - Random Forrest Classification")
-            print("4. ML - XGBoost Classification")
+            
 
-            strategy_choice = input("Enter your choice (1-4): ").strip()
+            strategy_choice = input("Enter your choice (1-3): ").strip()
 
             if strategy_choice == '1':
                 portfolio_df = portfolio.global_minimum_variance()
@@ -132,14 +132,9 @@ def main():
                 else:
                     print("Failed to generate ML Classification portfolio.")
             
-            #elif strategy_choice == '4':
-            #    portfolio.ml_classification_strategy()
-            #    print("ML - XGBoost Classification implemented.")
-            
             else :
-                print("Invalid choice. Please enter 1-4.")
+                print("Invalid choice. Please enter 1-3.")
                 return
-
 
 
         elif choice == '4':

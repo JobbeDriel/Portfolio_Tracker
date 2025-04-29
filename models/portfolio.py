@@ -89,10 +89,13 @@ class Portfolio:
                 continue
             shares = np.floor(allocation / price)
             spent = shares * price
+            
+            sector, asset_class, _ = fetch_asset_info(ticker)
+
             purchases.append({
                 "Ticker": ticker,
-                "Sector": "Unknown",
-                "Asset Class": "Equity",
+                "Sector": sector if sector else "Unknown",
+                "Asset Class": asset_class if asset_class else "Equity",
                 "Quantity": shares,
                 "Purchase Price": price
             })
@@ -308,7 +311,7 @@ class Portfolio:
                 data = data.xs('Close', axis=1, level=1)
             else:
                 data = data.iloc[:, :len(tickers)]
-    
+
         # FLATTEN column names to simple tickers
         data.columns = [c if isinstance(c, str) else c[1] for c in data.columns]
 
@@ -336,9 +339,12 @@ class Portfolio:
         print("Building cross-sectional features...")
         pivoted_features = past_returns.shift(1).dropna()
         latest_features = pivoted_features.iloc[-1]  # Used later for prediction
-        pivoted_features = pivoted_features.iloc[:-1]  # Exclude the last row
+        pivoted_features = pivoted_features.iloc[:-1]  # Exclude last row for train
 
-        # Build training set: each row = one stock on one day
+        # Build ticker ID mapping
+        ticker_ids = {ticker: i for i, ticker in enumerate(pivoted_features.columns)}
+
+        # Build training set: each row = market context + ticker ID
         merged = df[df['Date'].isin(pivoted_features.index)]
 
         X_list = []
@@ -347,9 +353,12 @@ class Portfolio:
             try:
                 X_row = pivoted_features.loc[date]
                 for _, row in group.iterrows():
-                    X_list.append(X_row.values)
+                    ticker_id = ticker_ids.get(row['Ticker'], -1)
+                    feature_vector = np.append(X_row.values, ticker_id)
+                    X_list.append(feature_vector)
                     y_list.append(row['Label'])
-            except:
+            except Exception as e:
+                print(f"Skipping date {date} due to error: {e}")
                 continue
 
         X_train = np.array(X_list)
@@ -364,16 +373,21 @@ class Portfolio:
 
         ticker_probs = []
 
-        X_input = latest_features.values.reshape(1, -1)
+        for ticker in latest_features.index:
+            ticker_id = ticker_ids.get(ticker, -1)
+            X_input = np.append(latest_features.values, ticker_id).reshape(1, -1)
 
-        for i, ticker in enumerate(latest_features.index):
-            prob_up = model.predict_proba(X_input)[0][1]  # Same for now, placeholder
-            ticker_probs.append((ticker, prob_up))
+            try:
+                prob_up = model.predict_proba(X_input)[0][1]  # probability of class 1 ("up")
+                ticker_probs.append((ticker, prob_up))
+            except Exception as e:
+                print(f"Error predicting for {ticker}: {e}")
+                continue
 
         # Sort by probability
         ticker_probs = sorted(ticker_probs, key=lambda x: x[1], reverse=True)
 
-        # Take top 10% (e.g., 50 stocks if you have 500 total)
+        # Take top 10% (e.g., 50 stocks if 500 total)
         top_n = int(len(ticker_probs) * 0.10)
 
         rising_stocks = [ticker for ticker, prob in ticker_probs[:top_n]]
