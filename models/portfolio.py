@@ -5,6 +5,8 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import scipy.optimize as sco
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
 
 class Portfolio:
     def __init__(self):
@@ -265,6 +267,178 @@ class Portfolio:
             })
 
         # Clear existing portfolio and add new purchases
+        self.assets = []
+        for asset in purchases:
+            if asset["Quantity"] > 0:
+                self.add_asset(
+                    ticker=asset["Ticker"],
+                    sector=asset["Sector"],
+                    asset_class=asset["Asset Class"],
+                    quantity=asset["Quantity"],
+                    purchase_price=asset["Purchase Price"]
+                )
+
+        total_spent = sum(asset["Quantity"] * asset["Purchase Price"] for asset in self.assets)
+        leftover_cash = total_budget - total_spent
+
+        print(f"\nPurchase complete. Total Spent: ${total_spent:,.2f}")
+        print(f"Remaining Cash: ${leftover_cash:,.2f}")
+
+        return total_spent, leftover_cash
+    
+    def ml_classification_strategy(self):
+        print("Fetching S&P 500 tickers...")
+
+        def get_sp500_tickers():
+            url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
+            table = pd.read_html(url)[0]
+            tickers = table['Symbol'].tolist()
+            tickers = [ticker.replace('.', '-') for ticker in tickers]
+            return tickers
+
+        tickers = get_sp500_tickers()
+
+        print("Downloading historical prices...")
+        data = yf.download(tickers, period="1y", auto_adjust=True)
+
+        if isinstance(data.columns, pd.MultiIndex):
+            if ('Price', 'Close') in data.columns:
+                data = data.xs(('Price', 'Close'), axis=1)
+            elif 'Close' in data.columns.get_level_values(1):
+                data = data.xs('Close', axis=1, level=1)
+            else:
+                data = data.iloc[:, :len(tickers)]
+    
+        # FLATTEN column names to simple tickers
+        data.columns = [c if isinstance(c, str) else c[1] for c in data.columns]
+
+        data = data.dropna(axis=1)  # Remove stocks with missing data
+
+        print("Building features and labels...")
+
+        # Feature: previous day's returns
+        past_returns = data.pct_change().shift(1)
+
+        # Label: 5-day forward return
+        forward_returns = data.pct_change(periods=5).shift(-5)
+        labels = (forward_returns > 0).astype(int)
+
+        # Stack into long format
+        X = past_returns.stack().reset_index()
+        X.columns = ['Date', 'Ticker', 'Return']
+
+        y = labels.stack().reset_index()
+        y.columns = ['Date', 'Ticker', 'Label']
+
+        df = pd.merge(X, y, on=['Date', 'Ticker']).dropna()
+
+        # Pivot: each row = stock on date, features = returns of all stocks
+        print("Building cross-sectional features...")
+        pivoted_features = past_returns.shift(1).dropna()
+        latest_features = pivoted_features.iloc[-1]  # Used later for prediction
+        pivoted_features = pivoted_features.iloc[:-1]  # Exclude the last row
+
+        # Build training set: each row = one stock on one day
+        merged = df[df['Date'].isin(pivoted_features.index)]
+
+        X_list = []
+        y_list = []
+        for date, group in merged.groupby('Date'):
+            try:
+                X_row = pivoted_features.loc[date]
+                for _, row in group.iterrows():
+                    X_list.append(X_row.values)
+                    y_list.append(row['Label'])
+            except:
+                continue
+
+        X_train = np.array(X_list)
+        y_train = np.array(y_list)
+
+        print(f"Training on {len(y_train)} samples with {X_train.shape[1]} features...")
+
+        model = RandomForestClassifier(n_estimators=100, class_weight='balanced', random_state=42)
+        model.fit(X_train, y_train)
+
+        print("Predicting today's winners...")
+
+        ticker_probs = []
+
+        X_input = latest_features.values.reshape(1, -1)
+
+        for i, ticker in enumerate(latest_features.index):
+            prob_up = model.predict_proba(X_input)[0][1]  # Same for now, placeholder
+            ticker_probs.append((ticker, prob_up))
+
+        # Sort by probability
+        ticker_probs = sorted(ticker_probs, key=lambda x: x[1], reverse=True)
+
+        # Take top 10% (e.g., 50 stocks if you have 500 total)
+        top_n = int(len(ticker_probs) * 0.10)
+
+        rising_stocks = [ticker for ticker, prob in ticker_probs[:top_n]]
+
+        print(f"Selected {len(rising_stocks)} most confident stocks predicted to go UP.")
+
+        if not rising_stocks:
+            print("No stocks predicted to go up. Exiting strategy.")
+            return None
+
+        weight = 1 / len(rising_stocks)
+        portfolio_df = pd.DataFrame({
+            'Ticker': rising_stocks,
+            'ML Weight': [weight] * len(rising_stocks)
+        })
+
+        print("\n--- ML Classification Portfolio ---")
+        print(portfolio_df.head())
+
+        return portfolio_df
+    
+    def purchase_ml_classification_portfolio(self, portfolio_df, total_budget):
+        tickers = portfolio_df['Ticker'].tolist()
+        weights = portfolio_df['ML Weight'].values
+
+        print(f"\nPurchasing ML Classification portfolio with a total budget of ${total_budget:,.2f}...")
+
+        print("Fetching latest prices...")
+        data = yf.download(tickers, period='1d', auto_adjust=True)
+
+        if isinstance(data.columns, pd.MultiIndex):
+            if ('Price', 'Close') in data.columns:
+                data = data.xs(('Price', 'Close'), axis=1)
+            elif 'Close' in data.columns.get_level_values(1):
+                data = data.xs('Close', axis=1, level=1)
+            else:
+                print("Cannot find Close prices, using first available columns.")
+                data = data.iloc[:, :len(tickers)]
+
+        latest_prices = data.iloc[-1]
+
+        if isinstance(latest_prices.index, pd.MultiIndex):
+            latest_prices.index = latest_prices.index.get_level_values(-1)
+
+        purchases = []
+
+        for ticker, weight in zip(tickers, weights):
+            allocation = total_budget * weight
+            if ticker not in latest_prices:
+                print(f"Ticker {ticker} price not found, skipping...")
+                continue
+
+            price = latest_prices[ticker]
+            shares = np.floor(allocation / price)
+            spent = shares * price
+
+            purchases.append({
+                "Ticker": ticker,
+                "Sector": "Unknown",
+                "Asset Class": "Equity",
+                "Quantity": shares,
+                "Purchase Price": price
+            })
+
+        # Clear existing assets
         self.assets = []
         for asset in purchases:
             if asset["Quantity"] > 0:

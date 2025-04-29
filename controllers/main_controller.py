@@ -74,7 +74,7 @@ def main():
             print("\nSelect a portfolio strategy:")
             print("1. Global Minimum Variance (GMV)")
             print("2. Equal Weighted Portfolio")
-            print("3. ML - Random Forrest Regression")
+            print("3. ML - Random Forrest Classification")
             print("4. ML - XGBoost Classification")
 
             strategy_choice = input("Enter your choice (1-4): ").strip()
@@ -114,9 +114,23 @@ def main():
                 else:
                     print("Failed to generate Equal Weighted portfolio.")
 
-            #elif strategy_choice == '3':
-            #    portfolio.ml_regression_strategy()
-            #    print("ML - Random Forrest Regression implemented.")
+
+            elif strategy_choice == '3':
+                portfolio_df = portfolio.ml_classification_strategy()
+
+                if portfolio_df is not None:
+                    print("Do you want to purchase the ML Classification portfolio? (1. Yes / 2. No)")
+                    purchase_choice = input("Enter your choice: ").strip()
+                    if purchase_choice == '1':
+                        budget = float(input("Enter the amount you want to invest (e.g., 100000): ").strip())
+                        portfolio.purchase_ml_classification_portfolio(portfolio_df, total_budget=budget)
+                        print("ML Classification Portfolio purchased.")
+                    elif purchase_choice == '2':
+                        print("ML Classification Portfolio not purchased.")
+                    else:
+                        print("Invalid choice. Please enter 1 or 2.")
+                else:
+                    print("Failed to generate ML Classification portfolio.")
             
             #elif strategy_choice == '4':
             #    portfolio.ml_classification_strategy()
