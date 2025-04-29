@@ -4,6 +4,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import scipy.optimize as sco
 
 class Portfolio:
     def __init__(self):
@@ -50,62 +51,80 @@ class Portfolio:
         df['Weight (%)'] = df['Current Value'] / total_value * 100
 
         return df, total_value
-
     
-    def view_summary(self):
-        if not self.assets:
-            print("Portfolio is empty.")
+    
+    def global_minimum_variance(self):
+        print("Fetching S&P 500 tickers...")
+
+        # Step 1: Get S&P500 Tickers
+        def get_sp500_tickers():
+            url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
+            table = pd.read_html(url)[0]
+            tickers = table['Symbol'].tolist()
+            tickers = [ticker.replace('.', '-') for ticker in tickers]
+            return tickers
+
+        tickers = get_sp500_tickers()
+
+        print(f"Fetched {len(tickers)} tickers. Downloading price data...")
+
+        # Step 2: Download 1 year adjusted close prices
+        data = yf.download(tickers, period="1y", auto_adjust=True)
+        print("printing the top of the data", data.head())
+        data = data.iloc[:,:len(tickers)]
+        print("printing the top of the data after slicing", data.head())
+
+        
+
+        print("Filtering tickers with missing data...")
+
+        # Step 3: Keep only tickers with complete data
+        valid_tickers = data.columns[data.notna().all()]
+        data = data[valid_tickers]
+
+        if data.shape[1] < 2:
+            print("Not enough valid tickers to optimize.")
             return
 
-        df = pd.DataFrame(self.assets)
-    
-        # Fetch current prices and compute current values
-        current_values = []
-        for _, row in df.iterrows():
-            try:
-                stock = yf.Ticker(row['Ticker'])
-                current_price = stock.info.get('currentPrice', None)
-                if current_price is None:
-                    raise ValueError("Price not available")
-                value = current_price * row['Quantity']
-            except Exception as e:
-                print(f"Error fetching price for {row['Ticker']}: {e}")
-                value = 0
-            current_values.append(value)
+        print(f"Number of valid tickers after filtering: {len(valid_tickers)}")
 
-        df['Current Value'] = current_values
+        # Step 4: Calculate returns
+        returns = data.pct_change().dropna()
 
-        total_value = df['Current Value'].sum()
-        if total_value == 0:
-            print("Could not calculate total portfolio value.")
+        # Step 5: Covariance matrix
+        cov_matrix = returns.cov()
+
+        n_assets = len(cov_matrix.columns)
+        print(f"Optimization over {n_assets} assets.")
+
+        # Step 6: Set up the optimization
+        x0 = np.array([1/n_assets] * n_assets)
+        bounds = tuple((0, 1) for _ in range(n_assets))
+        constraints = {'type': 'eq', 'fun': lambda x: np.sum(x) - 1}
+
+        def portfolio_variance(weights):
+            return np.dot(weights.T, np.dot(cov_matrix, weights))
+
+        print("Running optimization...")
+
+        result = sco.minimize(portfolio_variance, x0, method='SLSQP', bounds=bounds, constraints=constraints)
+
+        if not result.success:
+            print("Optimization failed.")
             return
 
-        # Weights per asset
-        df['Weight (%)'] = df['Current Value'] / total_value * 100
+        gm_weights = result.x
+        optimized_tickers = cov_matrix.columns
 
-        # Group by Asset Class and Sector
-        by_class = df.groupby('Asset Class')['Current Value'].sum()
-        by_class_weights = by_class / total_value * 100
+        # Step 7: Display optimized portfolio
+        portfolio_df = pd.DataFrame({
+            'Ticker': optimized_tickers,
+            'GMV Weight': gm_weights
+        }).sort_values('GMV Weight', ascending=False)
 
-        by_sector = df.groupby('Sector')['Current Value'].sum()
-        by_sector_weights = by_sector / total_value * 100
-
-        # Output
-        print("\n--- Portfolio Summary ---")
-        print(f"Total Portfolio Value: ${total_value:,.2f}\n")
-
-        print("--- Asset Weights ---")
-        for _, row in df.iterrows():
-            print(f"{row['Ticker']}: ${row['Current Value']:,.2f} ({row['Weight (%)']:.2f}%)")
-
-        print("\n--- By Asset Class ---")
-        for cls, val in by_class.items():
-            print(f"{cls}: ${val:,.2f} ({by_class_weights[cls]:.2f}%)")
-
-        print("\n--- By Sector ---")
-        for sec, val in by_sector.items():
-            print(f"{sec}: ${val:,.2f} ({by_sector_weights[sec]:.2f}%)")
-
+        print("\n--- Global Minimum Variance Portfolio ---")
+        print(portfolio_df.head(20))  # Top 20 biggest weights
+    
 
 def fetch_asset_info(ticker):
     try:

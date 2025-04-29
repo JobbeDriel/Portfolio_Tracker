@@ -2,6 +2,7 @@
 
 from models.portfolio import Portfolio, fetch_asset_info, fetch_ytd_performance, simulate_portfolio
 from views.portfolio_view import display_asset_info, plot_price_comparison, display_portfolio_summary, plot_portfolio_summary,  show_simulation_results
+
 import pandas as pd
 import yfinance as yf
 from datetime import datetime
@@ -10,15 +11,16 @@ def main():
     portfolio = Portfolio()
 
     while True:
-        print("\nPortfolio Tracker CLI (MVC Version)")
+        print("\nPortfolio Tracker CLI")
         print("1. View Asset Info")
         print("2. Add Asset")
-        print("3. View Portfolio")
-        print("4. Portfolio Summary & Weights")
-        print("5. Simulate Portfolio")
-        print("6. Exit")
+        print("3. Implement Portfolio Strategy")
+        print("4. View Portfolio")
+        print("5. Portfolio Summary & Weights")
+        print("6. Simulate Portfolio")
+        print("7. Exit")
 
-        choice = input("Enter your choice (1-6): ").strip()
+        choice = input("Enter your choice (1-7): ").strip()
 
         if choice == '1':
             comparison_data = {}
@@ -45,12 +47,12 @@ def main():
                     combined = combined / combined.iloc[0] * 100
                     plot_price_comparison(combined)
 
-                print("\nDo you want to compare with another stock?")
-                print("1. Yes")
-                print("2. No")
-                compare_more = input("Enter your choice: ").strip()
-                if compare_more != '1':
-                    break
+                    print("\nDo you want to compare with another stock?")
+                    print("1. Yes")
+                    print("2. No")
+                    compare_more = input("Enter your choice: ").strip()
+                    if compare_more != '1':
+                        break
 
         elif choice == '2':
             ticker = input("Enter ticker symbol (e.g., AAPL): ").strip().upper()
@@ -69,6 +71,37 @@ def main():
                 print(f"{ticker} added to your portfolio.")
 
         elif choice == '3':
+            print("\nSelect a portfolio strategy:")
+            print("1. Global Minimum Variance (GMV)")
+            print("2. Equal Weighted Portfolio")
+            print("3. ML - Random Forrest Regression")
+            print("4. ML - XGBoost Classification")
+
+            strategy_choice = input("Enter your choice (1-4): ").strip()
+
+            if strategy_choice == '1':
+                portfolio.global_minimum_variance()
+                print("Global Minimum Variance strategy implemented.")
+            
+            #elif strategy_choice == '2':
+            #    portfolio.equal_weighted_portfolio()
+            #    print("Equal Weighted Portfolio strategy implemented.")
+
+            #elif strategy_choice == '3':
+            #    portfolio.ml_regression_strategy()
+            #    print("ML - Random Forrest Regression implemented.")
+            
+            #elif strategy_choice == '4':
+            #    portfolio.ml_classification_strategy()
+            #    print("ML - XGBoost Classification implemented.")
+            
+            else :
+                print("Invalid choice. Please enter 1-4.")
+                return
+
+
+
+        elif choice == '4':
             df, _ = portfolio.get_portfolio_dataframe()
             if df is None or df.empty:
                 print("Portfolio is empty.")
@@ -79,7 +112,7 @@ def main():
                     print(f"   Sector: {row['Sector']}, Asset Class: {row['Asset Class']}")
                     print(f"   Current Value: ${row['Current Value']:,.2f} | Weight: {row['Weight (%)']:.2f}%\n")
 
-        elif choice == '4':
+        elif choice == '5':
             df, total_value = portfolio.get_portfolio_dataframe()
             if df is None or df.empty or total_value == 0:
                 print("Portfolio is empty or contains invalid pricing.")
@@ -89,19 +122,19 @@ def main():
                 display_portfolio_summary(df, total_value)
                 plot_portfolio_summary(df, by_class, by_sector)
 
-        elif choice == '5':
+        elif choice == '6':
             end_values, init_val = simulate_portfolio(portfolio)
             if end_values is not None:
                 show_simulation_results(end_values, init_val)
             else:
                 print("Simulation could not be performed.")
 
-        elif choice == '6':
+        elif choice == '7':
             print("Exiting Portfolio Tracker.")
             break
 
         else:
-            print("Invalid choice. Please enter 1-6.")
+            print("Invalid choice. Please enter 1-7.")
 
 if __name__ == "__main__":
     main()
