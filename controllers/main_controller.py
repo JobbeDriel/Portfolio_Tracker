@@ -81,7 +81,7 @@ def main():
 
             if strategy_choice == '1':
                 portfolio_df = portfolio.global_minimum_variance()
-                
+
                 if portfolio_df is not None:
                     print("Do you want to purchase the GMV portfolio? (1. Yes / 2. No)")
                     purchase_choice = input("Enter your choice: ").strip()
@@ -97,9 +97,22 @@ def main():
                     print("Failed to generate GMV portfolio.")
                 
             
-            #elif strategy_choice == '2':
-            #    portfolio.equal_weighted_portfolio()
-            #    print("Equal Weighted Portfolio strategy implemented.")
+            elif strategy_choice == '2':
+                portfolio_df = portfolio.equal_weighted_portfolio()
+
+                if portfolio_df is not None:
+                    print("Do you want to purchase the Equal Weighted portfolio? (1. Yes / 2. No)")
+                    purchase_choice = input("Enter your choice: ").strip()
+                    if purchase_choice == '1':
+                        budget = float(input("Enter the amount you want to invest (e.g., 100000): ").strip())
+                        portfolio.purchase_equal_weighted_portfolio(portfolio_df, total_budget=budget)
+                        print("Equal Weighted Portfolio purchased.")
+                    elif purchase_choice == '2':
+                        print("Equal Weighted Portfolio not purchased.")
+                    else:
+                        print("Invalid choice. Please enter 1 or 2.")
+                else:
+                    print("Failed to generate Equal Weighted portfolio.")
 
             #elif strategy_choice == '3':
             #    portfolio.ml_regression_strategy()

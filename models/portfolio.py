@@ -187,6 +187,102 @@ class Portfolio:
         print(portfolio_df.head(20))  # Top 20 biggest weights
         
         return portfolio_df
+
+    def equal_weighted_portfolio(self):
+        
+
+        print("Fetching S&P 500 tickers...")
+
+        def get_sp500_tickers():
+            url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
+            table = pd.read_html(url)[0]
+            tickers = table['Symbol'].tolist()
+            tickers = [ticker.replace('.', '-') for ticker in tickers]
+            return tickers
+
+        tickers = get_sp500_tickers()
+
+        n = len(tickers)
+        weight = 1 / n
+
+        portfolio_df = pd.DataFrame({
+            'Ticker': tickers,
+            'Equal Weight': [weight] * n
+        })
+
+        print("\n--- Equal Weighted Portfolio (1/N) ---")
+        print(portfolio_df.head(10))  # Show top 10
+
+        return portfolio_df
+    
+    def purchase_equal_weighted_portfolio(self, portfolio_df, total_budget):
+        import yfinance as yf
+        import numpy as np
+        import pandas as pd
+
+        # Extract tickers and weights
+        tickers = portfolio_df['Ticker'].tolist()
+        weights = portfolio_df['Equal Weight'].values
+
+        print(f"\nPurchasing Equal Weighted portfolio with a total budget of ${total_budget:,.2f}...")
+
+        print("Fetching latest prices...")
+        data = yf.download(tickers, period='1d', auto_adjust=True)
+
+        if isinstance(data.columns, pd.MultiIndex):
+            if ('Price', 'Close') in data.columns:
+                data = data.xs(('Price', 'Close'), axis=1)
+            elif 'Close' in data.columns.get_level_values(1):
+                data = data.xs('Close', axis=1, level=1)
+            else:
+                print("Cannot find Close prices, using first available columns.")
+                data = data.iloc[:, :len(tickers)]
+
+        latest_prices = data.iloc[-1]
+
+        # Flatten index if necessary
+        if isinstance(latest_prices.index, pd.MultiIndex):
+            latest_prices.index = latest_prices.index.get_level_values(-1)
+
+        purchases = []
+
+        for ticker, weight in zip(tickers, weights):
+            allocation = total_budget * weight
+            if ticker not in latest_prices:
+                print(f"Ticker {ticker} price not found, skipping...")
+                continue
+
+            price = latest_prices[ticker]
+            shares = np.floor(allocation / price)
+            spent = shares * price
+
+            purchases.append({
+                "Ticker": ticker,
+                "Sector": "Unknown",
+                "Asset Class": "Equity",
+                "Quantity": shares,
+                "Purchase Price": price
+            })
+
+        # Clear existing portfolio and add new purchases
+        self.assets = []
+        for asset in purchases:
+            if asset["Quantity"] > 0:
+                self.add_asset(
+                    ticker=asset["Ticker"],
+                    sector=asset["Sector"],
+                    asset_class=asset["Asset Class"],
+                    quantity=asset["Quantity"],
+                    purchase_price=asset["Purchase Price"]
+                )
+
+        total_spent = sum(asset["Quantity"] * asset["Purchase Price"] for asset in self.assets)
+        leftover_cash = total_budget - total_spent
+
+        print(f"\nPurchase complete. Total Spent: ${total_spent:,.2f}")
+        print(f"Remaining Cash: ${leftover_cash:,.2f}")
+
+        return total_spent, leftover_cash
     
 
 def fetch_asset_info(ticker):
