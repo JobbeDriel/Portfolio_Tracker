@@ -2,6 +2,7 @@
 
 import yfinance as yf
 import pandas as pd
+import numpy as np
 from datetime import datetime
 import matplotlib.pyplot as plt 
 
@@ -177,6 +178,97 @@ def fetch_asset_info(ticker):
         print(f"Error fetching data for {ticker}: {e}")
         return None, None, None
     
+def simulate_portfolio(portfolio, n_years=15, n_simulations=100000):
+    if not portfolio.assets:
+        print("Portfolio is empty.")
+        return
+
+    df = pd.DataFrame(portfolio.assets)
+    tickers = df['Ticker']
+    quantities = df['Quantity']
+
+    returns = []
+    start_prices = []
+
+    for ticker in tickers:
+        try:
+            stock = yf.Ticker(ticker)
+            hist = stock.history(period='1y')
+
+            if hist.empty:
+                print(f"No data for {ticker}. Skipping.")
+                continue
+
+            daily_returns = hist['Close'].pct_change().dropna()
+            drift = daily_returns.mean()
+            vol = daily_returns.std()
+            start_price = hist['Close'].iloc[-1]
+
+            returns.append((drift, vol))
+            start_prices.append(start_price)
+
+        except Exception as e:
+            print(f"Error fetching data for {ticker}: {e}")
+            continue
+
+    if not start_prices:
+        print("No valid stocks to simulate.")
+        return
+
+    start_prices = np.array(start_prices)
+    drifts = np.array([x[0] for x in returns])
+    vols = np.array([x[1] for x in returns])
+
+    n_days = n_years * 252
+    dt = 1/252
+
+    # Simulate final returns directly
+    np.random.seed(42)
+
+    final_prices = []
+
+    for i in range(len(start_prices)):
+        # Simulate log returns over all days
+        total_drift = (drifts[i] - 0.5 * vols[i]**2) * n_days * dt
+        total_vol = vols[i] * np.sqrt(n_days * dt)
+
+        # Random draws
+        Z = np.random.standard_normal(n_simulations)
+
+        # Final price from GBM formula
+        S_T = start_prices[i] * np.exp(total_drift + total_vol * Z)
+        final_prices.append(S_T)
+
+    final_prices = np.array(final_prices)  # Shape (n_assets, n_simulations)
+
+    # Portfolio value at end
+    portfolio_end_values = (final_prices.T * quantities.values).sum(axis=1)
+
+    # Analyze results
+    mean_ending = np.mean(portfolio_end_values)
+    median_ending = np.median(portfolio_end_values)
+    p5 = np.percentile(portfolio_end_values, 5)
+    p95 = np.percentile(portfolio_end_values, 95)
+
+    print(f"\n--- Portfolio Simulation ---")
+    print(f"Simulated {n_simulations:,} paths over {n_years} years.")
+
+    print(f"Expected Ending Value (Mean): ${mean_ending:,.2f}")
+    print(f"Median Ending Value: ${median_ending:,.2f}")
+    print(f"5th Percentile: ${p5:,.2f}")
+    print(f"95th Percentile: ${p95:,.2f}")
+
+    initial_value = (start_prices * quantities.values).sum()
+
+    plt.figure(figsize=(10,6))
+    plt.hist(portfolio_end_values, bins=100, density=True, alpha=0.7, color='skyblue')
+    plt.axvline(initial_value, color='red', linestyle='--', linewidth=2, label='Initial Portfolio Value')
+    plt.title('Distribution of Portfolio Ending Values')
+    plt.xlabel('Portfolio Value ($)')
+    plt.ylabel('Probability Density')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
 
 def main():
@@ -188,9 +280,10 @@ def main():
         print("2. Add Asset")
         print("3. View Portfolio")
         print("4. Portfolio Summary & Weights")
-        print("5. Exit")
+        print("5. Simulate Portfolio")
+        print("6. Exit")
 
-        choice = input("Enter your choice (1-5): ").strip()
+        choice = input("Enter your choice (1-6): ").strip()
 
         if choice == '1':
             ticker = input("Enter ticker symbol (e.g., AAPL): ").strip().upper()
@@ -312,13 +405,16 @@ def main():
 
         elif choice == '4':
             portfolio.view_summary()
-
+        
         elif choice == '5':
+            simulate_portfolio(portfolio)
+
+        elif choice == '6':
             print("Exiting Portfolio Tracker.")
             break
 
         else:
-            print("Invalid choice. Please enter 1-4.")
+            print("Invalid choice. Please enter 1-6.")
 
 if __name__ == "__main__":
     main()
