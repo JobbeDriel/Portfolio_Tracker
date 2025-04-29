@@ -85,32 +85,84 @@ def main():
         if choice == '1':
             ticker = input("Enter ticker symbol (e.g., AAPL): ").strip().upper()
     
-        # Fetch YTD
-        ytd = fetch_ytd_performance(ticker)
+            # Fetch YTD
+            ytd = fetch_ytd_performance(ticker)
     
-        if ytd is not None:
-            print(f"YTD performance for {ticker}: {ytd:.2%}")
-        else:
-            print("YTD performance data not available.")
+            if ytd is not None:
+                print(f"YTD performance for {ticker}: {ytd:.2%}")
+            else:
+                print("YTD performance data not available.")
 
-        # Fetch 1 year of historical prices
-        stock = yf.Ticker(ticker)
-        one_year_ago = datetime.now() - pd.DateOffset(years=1)
-        hist = stock.history(start=one_year_ago)
-        
+            # Fetch 1 year of historical prices
+            stock = yf.Ticker(ticker)
+            one_year_ago = datetime.now() - pd.DateOffset(years=1)
+            hist = stock.history(start=one_year_ago)['Close']
 
-        if hist.empty:
-            print("No historical data available to plot.")
-        else:
-            # Plot
+            comparison_data = {ticker: hist}
+
+            if hist.empty:
+                print("No historical data available to plot.")
+                continue 
+
+            # Plot initially
+            combined = pd.DataFrame(comparison_data).dropna()
+            combined = combined / combined.iloc[0] * 100
             plt.figure(figsize=(10,5))
-            plt.plot(hist.index, hist['Close'], label='Close Price')
-            plt.title(f'{ticker} Price over Last Year')
+            for col in combined.columns:
+                plt.plot(combined.index, combined[col], label=col)
+            plt.title("1-Year Price Comparison (Indexed to 100)")
             plt.xlabel('Date')
-            plt.ylabel('Price ($)')
+            plt.ylabel('Indexed Price')
             plt.legend()
             plt.grid(True)
             plt.show()
+
+            while True: 
+                print("\nDo you want to compare with another stock?")
+                print("1. Yes")
+                print("2. No")
+                compare = input("Enter 1 or 2: ").strip()
+
+                if compare == '1':
+                    new_ticker = input("Enter other ticker symbol: ").strip().upper()
+                    stock2 = yf.Ticker(new_ticker)
+                    hist2 = stock2.history(start=one_year_ago)['Close']
+
+                    if hist2.empty:
+                        print(f"No data for {new_ticker}. Skipping.")
+                        continue
+
+                    ytd2 = fetch_ytd_performance(new_ticker)
+                    if ytd2 is not None:
+                        print(f"YTD performance for {new_ticker}: {ytd2:.2%}")
+                    else:
+                        print("YTD performance not available.")
+
+                    # Add to comparison
+                    comparison_data[new_ticker] = hist2
+
+                    # Align and normalize all added tickers
+                    combined = pd.DataFrame(comparison_data).dropna()
+                    combined = combined / combined.iloc[0] * 100
+
+                    # Re-plot after each addition
+                    plt.figure(figsize=(10, 5))
+                    for col in combined.columns:
+                        plt.plot(combined.index, combined[col], label=col)
+                    plt.title("1-Year Price Comparison (Indexed to 100)")
+                    plt.xlabel("Date")
+                    plt.ylabel("Indexed Price")
+                    plt.legend()
+                    plt.grid(True)
+                    plt.show()
+
+                elif compare == '2':
+                    break
+                else:
+                    print("Please enter 1 or 2.")
+            continue 
+            
+
 
         if choice == '2':
             ticker = input("Enter ticker symbol (e.g., AAPL): ").strip().upper()
