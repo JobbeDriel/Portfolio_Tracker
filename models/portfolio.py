@@ -134,11 +134,9 @@ class Portfolio:
 
         # Step 2: Download 1 year adjusted close prices
         data = yf.download(tickers, period="1y", auto_adjust=True)
-        print("printing the top of the data", data.head())
+        #print("printing the top of the data", data.head())
         data = data.iloc[:,:len(tickers)]
-        print("printing the top of the data after slicing", data.head())
-
-        
+        #print("printing the top of the data after slicing", data.head())
 
         print("Filtering tickers with missing data...")
 
@@ -221,10 +219,6 @@ class Portfolio:
         return portfolio_df
     
     def purchase_equal_weighted_portfolio(self, portfolio_df, total_budget):
-        import yfinance as yf
-        import numpy as np
-        import pandas as pd
-
         # Extract tickers and weights
         tickers = portfolio_df['Ticker'].tolist()
         weights = portfolio_df['Equal Weight'].values
@@ -261,10 +255,12 @@ class Portfolio:
             shares = np.floor(allocation / price)
             spent = shares * price
 
+            sector, asset_class, _ = fetch_asset_info(ticker)
+
             purchases.append({
                 "Ticker": ticker,
-                "Sector": "Unknown",
-                "Asset Class": "Equity",
+                "Sector": sector if sector else "Unknown",
+                "Asset Class": asset_class if asset_class else "Equity",
                 "Quantity": shares,
                 "Purchase Price": price
             })
@@ -444,10 +440,12 @@ class Portfolio:
             shares = np.floor(allocation / price)
             spent = shares * price
 
+            sector, asset_class, _ = fetch_asset_info(ticker)
+
             purchases.append({
                 "Ticker": ticker,
-                "Sector": "Unknown",
-                "Asset Class": "Equity",
+                "Sector": sector if sector else "Unknown",
+                "Asset Class": asset_class if asset_class else "Equity",
                 "Quantity": shares,
                 "Purchase Price": price
             })
