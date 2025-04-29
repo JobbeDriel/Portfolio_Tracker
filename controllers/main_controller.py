@@ -80,8 +80,22 @@ def main():
             strategy_choice = input("Enter your choice (1-4): ").strip()
 
             if strategy_choice == '1':
-                portfolio.global_minimum_variance()
-                print("Global Minimum Variance strategy implemented.")
+                portfolio_df = portfolio.global_minimum_variance()
+                
+                if portfolio_df is not None:
+                    print("Do you want to purchase the GMV portfolio? (1. Yes / 2. No)")
+                    purchase_choice = input("Enter your choice: ").strip()
+                    if purchase_choice == '1':
+                        budget = float(input("Enter the amount you want to invest (e.g., 100000): ").strip())
+                        portfolio.purchase_gmv_portfolio(portfolio_df, total_budget=budget)
+                        print("GMV Portfolio purchased.")
+                    elif purchase_choice == '2':
+                        print("GMV Portfolio not purchased.")
+                    else:
+                        print("Invalid choice. Please enter 1 or 2.")
+                else:
+                    print("Failed to generate GMV portfolio.")
+                
             
             #elif strategy_choice == '2':
             #    portfolio.equal_weighted_portfolio()

@@ -51,6 +51,65 @@ class Portfolio:
         df['Weight (%)'] = df['Current Value'] / total_value * 100
 
         return df, total_value
+
+    def purchase_gmv_portfolio(self, portfolio_df, total_budget):
+    
+        tickers = [str(t) if not isinstance(t, str) else t for t in portfolio_df['Ticker']]
+        weights = portfolio_df['GMV Weight'].values
+
+        print(f"\nPurchasing GMV portfolio with a total budget of ${total_budget:,.2f}...")
+        data = yf.download(tickers, period='1d', auto_adjust=True)
+
+        if isinstance(data.columns, pd.MultiIndex):
+            # Handle MultiIndex properly
+            if ('Price', 'Close') in data.columns:
+                data = data.xs(('Price', 'Close'), axis=1)
+            elif 'Close' in data.columns.get_level_values(1):
+                data = data.xs('Close', axis=1, level=1)
+            else:
+                print("Cannot find Close prices, using first available level.")
+                data = data.iloc[:, :len(tickers)]
+
+        # Now flatten to Series with tickers as columns
+        latest_prices = data.iloc[-1]  # Last row = latest prices
+
+        # Fix columns if still messy
+        if isinstance(latest_prices.index, pd.MultiIndex):
+            latest_prices.index = latest_prices.index.get_level_values(-1)
+
+        print("Latest prices fetched for:", latest_prices.index.tolist())
+        purchases = []
+
+        for ticker, weight in zip(tickers, weights):
+            allocation = total_budget * weight
+            price = latest_prices.get(ticker, np.nan)
+            if np.isnan(price):
+                continue
+            shares = np.floor(allocation / price)
+            spent = shares * price
+            purchases.append({
+                "Ticker": ticker,
+                "Sector": "Unknown",
+                "Asset Class": "Equity",
+                "Quantity": shares,
+                "Purchase Price": price
+            })
+
+        # Clear old portfolio
+        self.assets = []
+        for asset in purchases:
+            if asset["Quantity"] > 0:
+                self.add_asset(
+                    ticker=asset["Ticker"],
+                    sector=asset["Sector"],
+                    asset_class=asset["Asset Class"],
+                    quantity=asset["Quantity"],
+                    purchase_price=asset["Purchase Price"]
+                )
+
+        total_spent = sum(asset["Quantity"] * asset["Purchase Price"] for asset in self.assets)
+        print(f"\nPurchase complete. Total Spent: ${total_spent:,.2f}")
+        print(f"Remaining Cash: ${total_budget - total_spent:,.2f}")
     
     
     def global_minimum_variance(self):
@@ -117,13 +176,17 @@ class Portfolio:
         optimized_tickers = cov_matrix.columns
 
         # Step 7: Display optimized portfolio
+        tickers_clean = [ticker[1] if isinstance(ticker, tuple) else ticker for ticker in cov_matrix.columns]
+
         portfolio_df = pd.DataFrame({
-            'Ticker': optimized_tickers,
+            'Ticker': tickers_clean,
             'GMV Weight': gm_weights
         }).sort_values('GMV Weight', ascending=False)
 
         print("\n--- Global Minimum Variance Portfolio ---")
         print(portfolio_df.head(20))  # Top 20 biggest weights
+        
+        return portfolio_df
     
 
 def fetch_asset_info(ticker):
