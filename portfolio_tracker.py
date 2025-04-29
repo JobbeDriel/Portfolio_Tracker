@@ -179,11 +179,24 @@ def main():
                 print(f"Fetched data: Sector: {sector}, Asset Class: {asset_class}, Latest Price: ${latest_price:.2f}")
                 print("YTD performance data not available.")
 
-            quantity = float(input("Enter quantity to buy: ").strip())
+            print("\nDo you want to buy this stock?")
+            print("1. Yes")
+            print("2. No")
+            
+            buy_choice = input("Enter 1 or 2: ").strip()
 
-            portfolio.add_asset(ticker, sector, asset_class, quantity, latest_price)
-            print(f"{ticker} added to your portfolio.")
+            if buy_choice == '1':
+                quantity = float(input("Enter quantity to buy: ").strip())
+                portfolio.add_asset(ticker, sector, asset_class, quantity, latest_price)
+                print(f"{ticker} added to your portfolio.")
+            elif buy_choice == '2':
+                print("Returning to main menu without buying.")
+                continue
+            else:
+                print("Invalid input. Returning to main menu.")
+                continue
 
+            
         elif choice == '3':
             portfolio.view_portfolio()
 
